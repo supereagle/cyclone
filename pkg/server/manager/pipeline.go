@@ -18,10 +18,14 @@ package manager
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/caicloud/cyclone/pkg/api"
 	"github.com/caicloud/cyclone/store"
+	gitlab "github.com/xanzy/go-gitlab"
 	"github.com/zoumo/logdog"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // PipelineManager represents the interface to manage pipeline.
@@ -55,7 +59,24 @@ func NewPipelineManager(dataStore *store.DataStore, pipelineRecordManager Pipeli
 
 // CreatePipeline creates a pipeline.
 func (m *pipelineManager) CreatePipeline(pipeline *api.Pipeline) (*api.Pipeline, error) {
-	return m.dataStore.CreatePipeline(pipeline)
+	createdPipeline, err := m.dataStore.CreatePipeline(pipeline)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the webhook for this pipeline.
+	if pipeline.AutoTrigger != nil && pipeline.AutoTrigger.SCMTrigger != nil {
+		for _, codeSourece := range pipeline.Build.Stages.CodeCheckout.CodeSources {
+			// Only create webhook for main repository.
+			if codeSourece.Main {
+				if err := m.createWebhook(createdPipeline.ProjectID, createdPipeline.ID, codeSourece); err != nil {
+					logdog.Error(err.Error())
+				}
+			}
+		}
+	}
+
+	return createdPipeline, nil
 }
 
 // GetPipeline gets the pipeline by name in one project.
@@ -146,4 +167,69 @@ func (m *pipelineManager) ClearPipelinesOfProject(projectID string) error {
 		}
 	}
 	return m.dataStore.DeletePipelinesByProjectID(projectID)
+}
+
+// createWebhook creates webhook for pipeline.
+func (m *pipelineManager) createWebhook(projectID string, pipelineID string, codeSource *api.CodeSource) error {
+	scmType := codeSource.Type
+	switch scmType {
+	case api.GitLab:
+		gitSource := codeSource.GitLab
+		url := gitSource.URL
+		httpsPrefix := "https://"
+		httpPrefix := "http://"
+		scmServer := ""
+
+		if strings.HasPrefix(url, httpsPrefix) {
+			scmServer = httpsPrefix + strings.Split(strings.TrimPrefix(url, httpsPrefix), "/")[0]
+		} else if strings.HasPrefix(url, httpPrefix) {
+			scmServer = httpPrefix + strings.Split(strings.TrimPrefix(url, httpPrefix), "/")[0]
+		} else {
+			return fmt.Errorf("The url of code source %s is not correct", url)
+		}
+
+		// Find the SCM token.
+		ds := m.dataStore
+		query := bson.M{"projectId": projectID, "server": scmServer}
+		accessToken := ""
+		if token, err := ds.FindSCMTokenByQuery(query); err == nil {
+			accessToken = token.AccessToken
+		}
+
+		// Create the webhook.
+		client := gitlab.NewOAuthClient(nil, accessToken)
+		client.SetBaseURL(scmServer + "/api/v3/")
+
+		cycloneServer := os.Getenv("CYCLONE_SERVER")
+		if cycloneServer == "" {
+			cycloneServer = "http://127.0.0.1:7099"
+		}
+		state := true
+		hookURL := fmt.Sprintf("%s/api/%s/webhooks/%s/pipelines/%s", cycloneServer, api.APIVersion, scmType, pipelineID)
+		hook := &gitlab.AddProjectHookOptions{
+			URL:                 &hookURL,
+			PushEvents:          &state,
+			MergeRequestsEvents: &state,
+			TagPushEvents:       &state,
+		}
+
+		owner, name := parseURL(url)
+		if _, _, err := client.Projects.AddProjectHook(owner+"/"+name, hook); err != nil {
+			return fmt.Errorf("Fail to create webhook for pipeline %s as %s", err.Error())
+		}
+
+		return nil
+	case api.GitHub, api.SVN:
+		return fmt.Errorf("Webhook trigger of %s is still not implmented", scmType)
+	}
+
+	return fmt.Errorf("Webhook trigger of %s is not supported", scmType)
+}
+
+// parseURL is a helper func to parse the url,such as https://github.com/caicloud/test.git
+// to return owner(caicloud) and name(test).
+func parseURL(url string) (string, string) {
+	strs := strings.SplitN(url, "/", -1)
+	name := strings.SplitN(strs[4], ".", -1)
+	return strs[3], name[0]
 }

@@ -25,17 +25,20 @@ import (
 )
 
 const (
-	// APIVersion is the version of API.
-	APIVersion = "/api/v1"
-
 	// projectPathParameterName represents the name of the path parameter for project.
 	projectPathParameterName = "project"
 
 	// pipelinePathParameterName represents the name of the path parameter for pipeline.
 	pipelinePathParameterName = "pipeline"
 
+	// pipelineIDPathParameterName represents the name of the path parameter for pipeline id.
+	pipelineIDPathParameterName = "pipelineId"
+
 	// pipelineRecordPathParameterName represents the name of the path parameter for pipeline record.
 	pipelineRecordPathParameterName = "recordId"
+
+	// scmTypePathParameterName represents the name of the path parameter for SCM type.
+	scmTypePathParameterName = "scmType"
 )
 
 // router represents the router to distribute the REST requests.
@@ -48,6 +51,9 @@ type router struct {
 
 	// pipelineRecordManager represents the pipeline record manager.
 	pipelineRecordManager manager.PipelineRecordManager
+
+	// webhookManager represents the webhook manager.
+	webhookManager manager.WebhookManager
 }
 
 // InitRouters initializes the router for REST APIs.
@@ -70,17 +76,26 @@ func InitRouters(dataStore *store.DataStore) error {
 		return err
 	}
 
+	// New webhook manager
+	webhookManager, err := manager.NewWebhookManager(dataStore)
+	if err != nil {
+		return err
+	}
+
 	router := &router{
 		projectManager,
 		pipelineManager,
 		pipelineRecordManager,
+		webhookManager,
 	}
 
 	ws := new(restful.WebService)
+	ws.Path("/api/" + api.APIVersion).Consumes(restful.MIME_JSON).Produces(restful.MIME_JSON)
 
 	router.registerProjectAPIs(ws)
 	router.registerPipelineAPIs(ws)
 	router.registerPipelineRecordAPIs(ws)
+	router.registerWebhookAPIs(ws)
 
 	restful.Add(ws)
 
@@ -94,7 +109,6 @@ func (router *router) registerProjectAPIs(ws *restful.WebService) {
 
 	logdog.Info("Register project APIs")
 
-	ws.Path(APIVersion).Consumes(restful.MIME_JSON).Produces(restful.MIME_JSON)
 	// POST /api/v1/projects
 	ws.Route(ws.POST("/projects").To(router.createProject).
 		Doc("Add a project").
@@ -124,7 +138,6 @@ func (router *router) registerProjectAPIs(ws *restful.WebService) {
 func (router *router) registerPipelineAPIs(ws *restful.WebService) {
 	logdog.Info("Register pipeline APIs")
 
-	ws.Path(APIVersion).Consumes(restful.MIME_JSON).Produces(restful.MIME_JSON)
 	// POST /api/v1/projects/{project}/pipelines
 	ws.Route(ws.POST("/projects/{project}/pipelines").To(router.createPipeline).
 		Doc("Add a pipeline").
@@ -160,7 +173,6 @@ func (router *router) registerPipelineAPIs(ws *restful.WebService) {
 func (router *router) registerPipelineRecordAPIs(ws *restful.WebService) {
 	logdog.Info("Register pipeline record APIs")
 
-	ws.Path(APIVersion).Consumes(restful.MIME_JSON).Produces(restful.MIME_JSON)
 	// GET /api/v1/projects/{project}/pipelines/{pipeline}/records
 	ws.Route(ws.GET("/projects/{project}/pipelines/{pipeline}/records").To(router.listPipelineRecords).
 		Doc("Get all pipeline records of one pipeline").
@@ -180,4 +192,15 @@ func (router *router) registerPipelineRecordAPIs(ws *restful.WebService) {
 		Param(ws.PathParameter("project", "name of the project").DataType("string")).
 		Param(ws.PathParameter("pipeline", "name of the pipeline").DataType("string")).
 		Param(ws.PathParameter("recordId", "id of the pipeline record").DataType("string")))
+}
+
+// registerWebhookAPIs registers webhook related endpoints.
+func (router *router) registerWebhookAPIs(ws *restful.WebService) {
+	logdog.Info("Register webhook APIs")
+
+	// POST /api/v1/webhooks/{scmType}/pipelines/{pipelineId}
+	ws.Route(ws.POST("/webhooks/{scmType}/pipelines/{pipelineId}").To(router.triggerPipelineByWebhook).
+		Doc("Trigger a pipeline by webhook").
+		Param(ws.PathParameter("scmType", "type of the SCM").DataType("string")).
+		Param(ws.PathParameter("pipelineId", "id of the pipeline to be triggered").DataType("string")))
 }

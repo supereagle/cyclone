@@ -18,6 +18,11 @@ package api
 
 import "time"
 
+const (
+	// APIVersion is the version of API.
+	APIVersion = "v1"
+)
+
 // Project represents a group to manage a set of related applications. It maybe a real project, which contains several or many applications.
 type Project struct {
 	ID          string    `bson:"_id,omitempty" json:"id,omitempty" description:"id of the project"`
@@ -82,18 +87,18 @@ type CodeCheckoutStage struct {
 	CodeSources []*CodeSource `bson:"codeSources,omitempty" json:"codeSources,omitempty" description:"list of code sources to be checked out"`
 }
 
-// CodeSourceType represents the type of code source, supports gitlab, github and svn.
-type CodeSourceType string
+// SCMType represents the type of SCM, supports gitlab, github and svn.
+type SCMType string
 
 const (
-	GitLab CodeSourceType = "gitlab"
-	GitHub                = "github"
-	SVN                   = "svn"
+	GitLab SCMType = "gitlab"
+	GitHub         = "github"
+	SVN            = "svn"
 )
 
 // CodeSource represents the config of code source, only one type is supported.
 type CodeSource struct {
-	Type CodeSourceType `bson:"type,omitempty" json:"type,omitempty" description:"type of code source, support gitlab, github and svn"`
+	Type SCMType `bson:"type,omitempty" json:"type,omitempty" description:"type of SCM, support gitlab, github and svn"`
 	// Whether is the main repo. Only support webhook and tag for main repo.
 	Main   bool       `bson:"main,omitempty" json:"main,omitempty" description:"whether is the main repo"`
 	GitLab *GitSource `bson:"gitLab,omitempty" json:"gitLab,omitempty" description:"code from gitlab"`
@@ -102,10 +107,24 @@ type CodeSource struct {
 
 // GitSource represents the config to get code from git.
 type GitSource struct {
-	Url      string `bson:"url,omitempty" json:"url,omitempty" description:"url of git repo"`
-	Ref      string `bson:"ref,omitempty" json:"ref,omitempty" description:"reference of git repo, support branch, tag"`
-	Username string `bson:"username,omitempty" json:"username,omitempty" description:"username of git"`
-	Password string `bson:"password,omitempty" json:"password,omitempty" description:"password of git"`
+	URL        string `bson:"url,omitempty" json:"url,omitempty" description:"url of git repo"`
+	Ref        string `bson:"ref,omitempty" json:"ref,omitempty" description:"reference of git repo, support branch, tag"`
+	Username   string `bson:"username,omitempty" json:"username,omitempty" description:"username of git"`
+	Password   string `bson:"password,omitempty" json:"password,omitempty" description:"password of git"`
+	WebhookURL string `bson:"webhookUrl,omitempty" json:"webhookUrl,omitempty" description:"webhook url if enable webhook"`
+}
+
+type SCMToken struct {
+	ID           string    `bson:"_id,omitempty" json:"id,omitempty" description:"id of the SCM token"`
+	ProjectID    string    `bson:"projectId,omitempty" json:"projectId,omitempty" description:"id of the project which the scm token belongs to"`
+	Server       string    `bson:"server,omitempty" json:"server,omitempty" description:"server of SCM"`
+	Type         SCMType   `bson:"type,omitempty" json:"type,omitempty" description:"type of SCM, support gitlab, github and svn"`
+	AccessToken  string    `bson:"accessToken,omitempty" json:"accessToken,omitempty" description:"access token for SCM"`
+	TokenType    string    `bson:"tokenType,omitempty" json:"tokenType,omitempty" description:"type of access token"`
+	RefreshToken string    `bson:"refreshToken,omitempty" json:"refreshToken,omitempty" description:"token to refresh access token if it expires"`
+	Expiry       time.Time `bson:"expiry,omitempty" json:"expiry,omitempty" description:"expiration time of access token"`
+	CreatedTime  time.Time `bson:"createdTime,omitempty" json:"createdTime,omitempty" description:"created time of the SCM token"`
+	UpdatedTime  time.Time `bson:"updatedTime,omitempty" json:"updatedTime,omitempty" description:"updated time of the SCM token"`
 }
 
 // UnitTestStage represents the config of unit test stage.
@@ -268,6 +287,12 @@ type GeneralStageStatus struct {
 	Status    Status    `bson:"status,omitempty" json:"status,omitempty" description:"status of the stage"`
 	StartTime time.Time `bson:"startTime,omitempty" json:"startTime,omitempty" description:"start time of the stage"`
 	EndTime   time.Time `bson:"endTime,omitempty" json:"endTime,omitempty" description:"end time of the stage"`
+}
+
+// WebhookTriggerParams represents the trigger parameters from webhook.
+type WebhookTriggerParams struct {
+	Ref      string `bson:"ref,omitempty" json:"ref,omitempty" description:"reference where the event froms"`
+	CommitID string `bson:"commitId,omitempty" json:"commitId,omitempty" description:"commit id of the event"`
 }
 
 // ListMeta represents metadata that list resources must have.
