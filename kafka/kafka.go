@@ -19,6 +19,7 @@ package kafka
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/caicloud/cyclone/pkg/log"
 	"github.com/optiopay/kafka"
@@ -36,8 +37,6 @@ var (
 	lockReproduce       sync.RWMutex
 	lockConsumer        sync.RWMutex
 	kafkaAddrs          []string
-	reproduceTimes      = 0
-	reconsumerTimes     = 0
 )
 
 const (
@@ -46,10 +45,13 @@ const (
 	Broker             = "log-client"
 	reproduceMaxTimes  = 3
 	reconsumerMaxTimes = 3
+
+	// retryInterval represents the interval time to retry the connection to Kafka if it is offline.
+	retryInterval = 1 * time.Second
 )
 
-// Dail dail to kafka server
-func Dail(sKafkaAddrs []string) (err error) {
+// Dial dial to kafka server
+func Dial(sKafkaAddrs []string) (err error) {
 	kafkaAddrs = sKafkaAddrs
 	conf := kafka.NewBrokerConf(Broker)
 	conf.AllowTopicCreation = true
@@ -70,11 +72,11 @@ func Close() {
 	broker.Close()
 }
 
-// redail redial to kafka server
-func redail() {
-	log.Infof("redail kafka!")
+// redial redial to kafka server
+func redial() {
+	log.Infof("redial kafka!")
 	Close()
-	Dail(kafkaAddrs)
+	Dial(kafkaAddrs)
 }
 
 // IsConnected get the status of the link to kafka server
@@ -91,28 +93,21 @@ func Produce(sTopic string, byrMsg []byte) (err error) {
 }
 
 // produce produce the message to the special topic. If kafka client offline, it
-// will redail kafka server and produce message again. If produce message to kafka
+// will redial kafka server and produce message again. If produce message to kafka
 // server 3 times continuously, the function will exit and return error.
 func produce(sTopic string, byrMsg []byte) (err error) {
-	if reproduceTimes > reproduceMaxTimes {
-		return fmt.Errorf("produce message error too many times")
-	}
-
 	msg := &proto.Message{Value: byrMsg}
-	if msg == nil {
-		return fmt.Errorf("kafka generate nil message")
+	_, err = producer.Produce(sTopic, Partition, msg)
+	for retryTimes := 0; err != nil && retryTimes < reproduceMaxTimes; retryTimes++ {
+		log.Errorf("Can't produce message to %s:%d: %s", sTopic, Partition, err.Error())
+
+		// Sleep and retry later.
+		time.Sleep(retryInterval)
+		redial()
+		_, err = producer.Produce(sTopic, Partition, msg)
 	}
 
-	if _, err := producer.Produce(sTopic, Partition, msg); err != nil {
-		log.Errorf("Can't produce message to %s:%d: %s", sTopic, Partition,
-			err.Error())
-		reproduceTimes++
-		redail()
-		return produce(sTopic, byrMsg)
-	}
-	reproduceTimes = 0
-
-	return nil
+	return err
 }
 
 // NewConsumer create a new cosumer to the special topic
@@ -124,25 +119,25 @@ func NewConsumer(sTopic string) (kafka.Consumer, error) {
 }
 
 // newConsumer create a new consumer to the special topic. If kafka client offline,
-// it will redail kafka server and create new consumer again. If create consumer
+// it will redial kafka server and create new consumer again. If create consumer
 // 3 times continuously, the function will exit and return error.
 func newConsumer(sTopic string) (kafka.Consumer, error) {
-	if reconsumerTimes > reconsumerMaxTimes {
-		return nil, fmt.Errorf("new consumer error too many times")
-	}
-
 	conf := kafka.NewConsumerConf(sTopic, Partition)
 	conf.StartOffset = kafka.StartOffsetOldest
 	conf.RetryLimit = ConsumeRetryLimit
 	consumer, err := broker.Consumer(conf)
-	if err != nil {
-		log.Errorf("Can't create kafka consumer for %s:%d: %s", sTopic,
-			Partition, err.Error())
-		reconsumerTimes++
-		redail()
-		return newConsumer(sTopic)
-	}
-	reconsumerTimes = 0
+	for retryTimes := 0; err != nil && retryTimes < reconsumerMaxTimes; retryTimes++ {
+		log.Errorf("Can't create kafka consumer for %s:%d: %s", sTopic, Partition, err.Error())
 
-	return consumer, err
+		// Sleep and retry later.
+		time.Sleep(retryInterval)
+		redial()
+		consumer, err = broker.Consumer(conf)
+	}
+
+	if err == nil {
+		return consumer, nil
+	}
+
+	return nil, fmt.Errorf("Fail to new consumer after %d retries as %s", reconsumerMaxTimes, err.Error())
 }

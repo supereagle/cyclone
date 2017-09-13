@@ -169,7 +169,7 @@ func (s *PreparedAPIServer) StartLogServer() {
 	go loghttp.Server()
 
 	// start websocket log server
-	err := kafka.Dail([]string{s.Config.KafkaHost})
+	err := kafka.Dial([]string{s.Config.KafkaHost})
 	if nil != err {
 		log.Error(err.Error())
 	}
