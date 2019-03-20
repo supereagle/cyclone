@@ -4,16 +4,17 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/caicloud/cyclone/pkg/controller"
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
 	"github.com/caicloud/cyclone/pkg/k8s/informers"
 	"github.com/caicloud/cyclone/pkg/workflow/common"
-	"github.com/caicloud/cyclone/pkg/workflow/controller"
+	wfctl "github.com/caicloud/cyclone/pkg/workflow/controller"
 	handlers "github.com/caicloud/cyclone/pkg/workflow/controller/handlers/workflowrun"
 	"github.com/caicloud/cyclone/pkg/workflow/workflowrun"
 )
 
 // NewWorkflowRunController ...
-func NewWorkflowRunController(client clientset.Interface) *Controller {
+func NewWorkflowRunController(client clientset.Interface) *controller.Controller {
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	factory := informers.NewSharedInformerFactory(
 		client,
@@ -27,9 +28,9 @@ func NewWorkflowRunController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: CREATE,
+				EventType: controller.CREATE,
 				Object:    obj,
 			})
 		},
@@ -38,9 +39,9 @@ func NewWorkflowRunController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: UPDATE,
+				EventType: controller.UPDATE,
 				Object:    new,
 			})
 		},
@@ -49,24 +50,24 @@ func NewWorkflowRunController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: DELETE,
+				EventType: controller.DELETE,
 				Object:    obj,
 			})
 		},
 	})
 
-	return &Controller{
-		name:      "WorkflowRun Controller",
-		clientSet: client,
-		informer:  informer,
-		queue:     queue,
-		eventHandler: &handlers.Handler{
+	return controller.NewController(
+		"WorkflowRun Controller",
+		client,
+		queue,
+		informer,
+		&handlers.Handler{
 			Client:           client,
 			TimeoutProcessor: workflowrun.NewTimeoutProcessor(client),
-			GCProcessor:      workflowrun.NewGCProcessor(client, controller.Config.GC.Enabled),
-			LimitedQueues:    workflowrun.NewLimitedQueues(client, controller.Config.Limits.MaxWorkflowRuns),
+			GCProcessor:      workflowrun.NewGCProcessor(client, wfctl.Config.GC.Enabled),
+			LimitedQueues:    workflowrun.NewLimitedQueues(client, wfctl.Config.Limits.MaxWorkflowRuns),
 		},
-	}
+	)
 }

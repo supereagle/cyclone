@@ -5,6 +5,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/caicloud/cyclone/pkg/controller"
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
 	"github.com/caicloud/cyclone/pkg/k8s/informers"
 	"github.com/caicloud/cyclone/pkg/workflow/common"
@@ -12,7 +13,7 @@ import (
 )
 
 // NewPodController ...
-func NewPodController(client clientset.Interface) *Controller {
+func NewPodController(client clientset.Interface) *controller.Controller {
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		client,
@@ -29,9 +30,9 @@ func NewPodController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: CREATE,
+				EventType: controller.CREATE,
 				Object:    obj,
 			})
 		},
@@ -40,9 +41,9 @@ func NewPodController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: UPDATE,
+				EventType: controller.UPDATE,
 				Object:    new,
 			})
 		},
@@ -51,21 +52,21 @@ func NewPodController(client clientset.Interface) *Controller {
 			if err != nil {
 				return
 			}
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: DELETE,
+				EventType: controller.DELETE,
 				Object:    obj,
 			})
 		},
 	})
 
-	return &Controller{
-		name:      "Workflow Pod Controller",
-		clientSet: client,
-		informer:  informer,
-		queue:     queue,
-		eventHandler: &pod.Handler{
+	return controller.NewController(
+		"Workflow Pod Controller",
+		client,
+		queue,
+		informer,
+		&pod.Handler{
 			Client: client,
 		},
-	}
+	)
 }

@@ -1,4 +1,4 @@
-package controllers
+package controller
 
 import (
 	"fmt"
@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
-	"github.com/caicloud/cyclone/pkg/workflow/controller/handlers"
 )
 
 // Controller ...
@@ -20,7 +19,18 @@ type Controller struct {
 	clientSet    clientset.Interface
 	queue        workqueue.RateLimitingInterface
 	informer     cache.SharedIndexInformer
-	eventHandler handlers.Interface
+	eventHandler Handler
+}
+
+// NewController news a controller to handler k8s resources.
+func NewController(name string, clientSet clientset.Interface, queue workqueue.RateLimitingInterface, informer cache.SharedIndexInformer, handler Handler) *Controller {
+	return &Controller{
+		name,
+		clientSet,
+		queue,
+		informer,
+		handler,
+	}
 }
 
 // EventType ...

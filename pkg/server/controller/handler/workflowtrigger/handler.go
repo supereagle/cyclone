@@ -3,7 +3,7 @@ package workflowtrigger
 import (
 	log "github.com/sirupsen/logrus"
 
-	"github.com/caicloud/cyclone/pkg/workflow/controller/handlers"
+	"github.com/caicloud/cyclone/pkg/controller"
 )
 
 // Handler ...
@@ -13,7 +13,7 @@ type Handler struct {
 
 var (
 	// Check whether *Handler has implemented handlers.Interface interface.
-	_ handlers.Interface = (*Handler)(nil)
+	_ controller.Handler = (*Handler)(nil)
 )
 
 // ObjectCreated ...

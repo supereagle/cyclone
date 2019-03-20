@@ -1,19 +1,21 @@
 package controllers
 
 import (
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/caicloud/cyclone/pkg/controller"
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
 	"github.com/caicloud/cyclone/pkg/k8s/informers"
-	"github.com/caicloud/cyclone/pkg/workflow/controller/handlers/workflowtrigger"
+	"github.com/caicloud/cyclone/pkg/server/controller/handler/workflowtrigger"
 )
 
 // NewWorkflowTriggerController ...
-func NewWorkflowTriggerController(client clientset.Interface) *Controller {
+func NewWorkflowTriggerController(client clientset.Interface) *controller.Controller {
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		client,
@@ -28,9 +30,9 @@ func NewWorkflowTriggerController(client clientset.Interface) *Controller {
 				return
 			}
 			log.WithField("name", key).Debug("new WorkflowTrigger observed")
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: CREATE,
+				EventType: controller.CREATE,
 				Object:    obj,
 			})
 		},
@@ -40,9 +42,9 @@ func NewWorkflowTriggerController(client clientset.Interface) *Controller {
 				return
 			}
 			log.WithField("name", key).Debug("WorkflowTrigger update observed")
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: UPDATE,
+				EventType: controller.UPDATE,
 				Object:    new,
 			})
 		},
@@ -52,21 +54,22 @@ func NewWorkflowTriggerController(client clientset.Interface) *Controller {
 				return
 			}
 			log.WithField("name", key).Debug("deleting WorkflowTrigger")
-			queue.Add(Event{
+			queue.Add(controller.Event{
 				Key:       key,
-				EventType: DELETE,
+				EventType: controller.DELETE,
 				Object:    obj,
 			})
 		},
 	})
 
-	return &Controller{
-		name:      "WorkflowTrigger Controller",
-		clientSet: client,
-		informer:  informer,
-		queue:     queue,
-		eventHandler: &workflowtrigger.Handler{
+	fmt.Println("return wft ctrl")
+	return controller.NewController(
+		"WorkflowTrigger Controller",
+		client,
+		queue,
+		informer,
+		&workflowtrigger.Handler{
 			CronManager: workflowtrigger.NewTriggerManager(client),
 		},
-	}
+	)
 }

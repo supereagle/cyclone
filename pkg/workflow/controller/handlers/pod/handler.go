@@ -4,8 +4,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/caicloud/cyclone/pkg/controller"
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
-	"github.com/caicloud/cyclone/pkg/workflow/controller/handlers"
 )
 
 // Handler ...
@@ -14,7 +14,7 @@ type Handler struct {
 }
 
 // Ensure *Handler has implemented handlers.Interface interface.
-var _ handlers.Interface = (*Handler)(nil)
+var _ controller.Handler = (*Handler)(nil)
 
 // ObjectCreated ...
 func (h *Handler) ObjectCreated(obj interface{}) {

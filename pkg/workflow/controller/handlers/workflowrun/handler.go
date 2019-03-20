@@ -10,9 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/caicloud/cyclone/pkg/apis/cyclone/v1alpha1"
+	"github.com/caicloud/cyclone/pkg/controller"
 	"github.com/caicloud/cyclone/pkg/k8s/clientset"
-	"github.com/caicloud/cyclone/pkg/workflow/controller"
-	"github.com/caicloud/cyclone/pkg/workflow/controller/handlers"
+	wfctl "github.com/caicloud/cyclone/pkg/workflow/controller"
 	"github.com/caicloud/cyclone/pkg/workflow/workflowrun"
 )
 
@@ -38,7 +38,7 @@ type Handler struct {
 }
 
 // Ensure *Handler has implemented handlers.Interface interface.
-var _ handlers.Interface = (*Handler)(nil)
+var _ controller.Handler = (*Handler)(nil)
 
 // ObjectCreated handles a newly created WorkflowRun
 func (h *Handler) ObjectCreated(obj interface{}) {
@@ -176,7 +176,7 @@ func sendNotifications(wfr *v1alpha1.WorkflowRun) {
 	}
 	body := bytes.NewReader(bodyBytes)
 
-	for _, endpoint := range controller.Config.Notifications {
+	for _, endpoint := range wfctl.Config.Notifications {
 		req, err := http.NewRequest(http.MethodPost, endpoint.URL, body)
 		if err != nil {
 			log.WithField("wfr", wfr.Name).Error("Failed to new notification request: ", err)

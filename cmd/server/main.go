@@ -16,13 +16,16 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/caicloud/cyclone/pkg/common"
+	"github.com/caicloud/cyclone/pkg/common/signals"
 	"github.com/caicloud/cyclone/pkg/server/apis"
 	"github.com/caicloud/cyclone/pkg/server/apis/filters"
 	"github.com/caicloud/cyclone/pkg/server/apis/modifiers"
 	"github.com/caicloud/cyclone/pkg/server/config"
+	"github.com/caicloud/cyclone/pkg/server/controller/controller"
 	"github.com/caicloud/cyclone/pkg/server/handler"
 	"github.com/caicloud/cyclone/pkg/server/handler/v1alpha1"
 	"github.com/caicloud/cyclone/pkg/server/version"
@@ -147,6 +150,18 @@ func main() {
 			return nil
 		},
 	})
+
+	// Create k8s clientset and registry system signals for exit.
+	client, err := common.GetClient("", opts.KubeConfig)
+	if err != nil {
+		log.Fatal("Create k8s clientset error: ", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	signals.GracefulShutdown(cancel)
+
+	// Watch workflowTrigger who will start workflowRun on schedule
+	wftController := controllers.NewWorkflowTriggerController(client)
+	go wftController.Run(ctx.Done())
 
 	log.Infof("Cyclone service listening on %s:%d", config.Config.CycloneServerHost, config.Config.CycloneServerPort)
 

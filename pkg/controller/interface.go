@@ -1,7 +1,7 @@
-package handlers
+package controller
 
-// Interface ...
-type Interface interface {
+// Handler ...
+type Handler interface {
 	// ObjectCreated handles object creation
 	ObjectCreated(obj interface{})
 	// ObjectUpdated handles object update
